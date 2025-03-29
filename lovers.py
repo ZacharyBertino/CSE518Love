@@ -23,11 +23,9 @@ tn = get_truncated_normal()
 
 # Generate unique traits
 traits = generate_unique_rows(n_people, n_traits, tn)
-print("Traits:\n", traits)
 
 # If you also need unique preferences, you can generate them similarly:
 preferences = generate_unique_rows(n_people, n_traits, tn)
-print("Preferences:\n", preferences)
 
 
 class Man:
@@ -43,13 +41,6 @@ class Man:
 # Create a list to store all men
 men = [Man(i + 1, traits[i], preferences[i]) for i in range(n_people)]
 
-# Example: Accessing traits of the first man (m1)
-print(men[0].traits)  # This prints the traits of the first person (m1)
-
-# Example: Print all men
-for man in men:
-    print(man)
-
 
 class Woman:
     def __init__(self, id, traits, preferences):
@@ -63,13 +54,3 @@ class Woman:
 
 # Create a list to store all women
 women = [Woman(i + 1, traits[i], preferences[i]) for i in range(n_people)]
-
-# Example: Accessing traits of the first woman (w1)
-print(women[0].traits)  # This prints the "traits" of the first woman
-
-# Example: Print all women
-for woman in women:
-    print(woman)
-
-print(men[0])
-print(women[0])
