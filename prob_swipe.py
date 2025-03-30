@@ -83,6 +83,10 @@ def swipe_probability(preferences1, traits2, base_exponent=2, threshold=0.75, al
     if distribution["excellent"] >= 2:
         adjusted_score += 0.05 * (distribution["excellent"] / distribution["total"])
 
+        # Bonus for having multiple goof matches
+        if distribution["good"] >= 2:
+            adjusted_score += 0.02 * (distribution["good"] / distribution["total"])
+
     # Penalty for poor matches
     if distribution["poor"] > 0:
         poor_penalty = 0.15 * (distribution["poor"] / distribution["total"])
@@ -177,5 +181,5 @@ def test_algorithm():
         print(f"Cubic score: {analysis['cubic_score']:.4f}")
         print(f"Swipe probability: {analysis['swipe_probability']:.4f}\n")
 
-
-test_algorithm()
+if __name__ == "__main__":
+    test_algorithm()
