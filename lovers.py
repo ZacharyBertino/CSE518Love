@@ -39,9 +39,9 @@ class Man:
 
 
 # Create a list to store all men
-men = [Man(i + 1, traits[i], preferences[i]) for i in range(n_people)]
+men = [Man(i, traits[i], preferences[i]) for i in range(n_people)]
 
-
+#Women created with the "soulmate" idea of having the exact matching traits of the man
 class Woman:
     def __init__(self, id, traits, preferences):
         self.id = id
@@ -53,4 +53,4 @@ class Woman:
 
 
 # Create a list to store all women
-women = [Woman(i + 1, traits[i], preferences[i]) for i in range(n_people)]
+women = [Woman(i, traits[i], preferences[i]) for i in range(n_people)]

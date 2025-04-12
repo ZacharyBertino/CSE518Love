@@ -86,6 +86,7 @@ def swipe_probability(preferences1, traits2, base_exponent=2, threshold=0.75, al
         # Bonus for having multiple goof matches
         if distribution["good"] >= 2:
             adjusted_score += 0.02 * (distribution["good"] / distribution["total"])
+        #TODO: why is this if statement nested?
 
     # Penalty for poor matches
     if distribution["poor"] > 0:

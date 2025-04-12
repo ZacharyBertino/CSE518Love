@@ -1,6 +1,7 @@
 import numpy as np
 from lovers import men, women
 from prob_swipe import compatibility_score, swipe_probability
+from itertools import product
 
 
 class PreferenceModel:
@@ -123,6 +124,7 @@ class PreferenceModel:
             return np.zeros_like(self.preferences)
 
         # More swipes = more confidence
+        #20 because that's the number of people in the current sample space
         base_confidence = min(len(self.swipe_history) / 20, 1.0)
 
         # Calculate consistency of each trait across swipes
@@ -142,17 +144,40 @@ class PreferenceModel:
                 # Lower variance = higher confidence
                 trait_confidence = 1 - np.clip(trait_variances * 2, 0, 0.8)
 
+                #print('trait confidence: ' + str(trait_confidence))
+                #print('trait variance: ' + str(trait_variances))
+                #print('right swipe traits: ' + str(right_swipe_traits))
+
                 # Combine base confidence with trait-specific confidence
                 confidence = base_confidence * trait_confidence
+
+                #confidence = trait_confidence
             else:
                 confidence = np.full_like(self.preferences, base_confidence * 0.5)
         else:
             confidence = np.zeros_like(self.preferences)
 
         return confidence
+    
+    #find the next swipe based on minimizing lambda function defining next swipe heuristic, return a value from potential_matches
+    #also filter by swipe history (don't swipe on the same person more than once)
+    def find_next_swipe(self, potential_matches, swipe_heuristic):
+        swipe_list = []
+        for swipe in self.swipe_history:
+            swipe_list.append(swipe['profile_id'])
+        potential_matches = [x for x in potential_matches if x.id not in swipe_list]
+        best_index = min(enumerate(potential_matches), key=lambda x: swipe_heuristic(self.preferences, x[1].traits))[0]
+        return best_index
 
+#return value that is the distance between the traits and prefs (can generalize to weighted min fit later)
+#make sure the heuristics don't allow you to swipe on people you have seen before
+def min_fit_heuristic(prefs, traits):
+    return np.sum(np.abs(prefs - traits))
 
-def create_user_model(user, initial_preferences=None):
+def max_fit_heuristic(prefs, traits):
+    return -1 * np.sum(np.abs(prefs - traits))
+
+def create_user_model(user, initial_preferences=None, regularization = None):
     """
     Create a preference model for a user
 
@@ -170,10 +195,13 @@ def create_user_model(user, initial_preferences=None):
         noisy_preferences = user.preferences + noise
         initial_preferences = np.clip(noisy_preferences, 0, 1)
 
-    return PreferenceModel(initial_preferences)
+    if regularization == None:
+        return PreferenceModel(initial_preferences)
+    else:
+        return PreferenceModel(initial_preferences, regularization)
 
 
-def simulate_learning(user, potential_matches, n_swipes=30):
+def simulate_learning(user, potential_matches, n_swipes=30, swipe_heuristic = None, learning_rates = None, model = None):
     """
     Simulate preference learning through a series of swipes
 
@@ -187,17 +215,38 @@ def simulate_learning(user, potential_matches, n_swipes=30):
     - List of swipe results
     """
     # Create model with no initial knowledge of preferences
-    model = create_user_model(user, initial_preferences=None)
+    if model == None:
+        model = create_user_model(user, initial_preferences=None)
 
     # Track results for analysis
     results = []
 
+    matches = potential_matches.copy()
+
+
+    if learning_rates != None:
+        l_index = -1
+        l_indices = [0] * min(n_swipes, len(potential_matches))
+        for i in range(len(l_indices)):
+            if i % ((int(len(l_indices) / len(learning_rates))) + 1) == 0:
+                l_index += 1
+            l_indices[i] = l_index
+
+
     # Simulate swipes
-    for i in range(min(n_swipes, len(potential_matches))):
-        profile = potential_matches[i]
+    #trying to add in dynamic learning rate to get close to best fits before slowing down
+    for i in range(min(n_swipes, len(matches))):
+        if learning_rates != None:
+            model.learning_rate = learning_rates[l_indices[i]]#as we progress, decrease the learning rate
+        if swipe_heuristic == None:
+            profile = matches[i]
+        else:
+            profile_index = model.find_next_swipe(potential_matches=potential_matches, swipe_heuristic=swipe_heuristic)
+            profile = matches[profile_index]
+        
 
         # Calculate true swipe probability based on user's actual preferences
-        true_compatibility = compatibility_score(profile.traits, user.preferences, exponent=3)
+        true_compatibility = compatibility_score(profile.traits, user.preferences, exponent=0.5)
 
         # Apply sigmoid to get probability
         alpha = 10
@@ -226,6 +275,84 @@ def simulate_learning(user, potential_matches, n_swipes=30):
     return model, results
 
 
+#return pairs of ids (male,female) for those who have been matched and therefore removed from the pool of potential matches
+def threshold_matches(male_models, female_models, t, conf_t):
+
+    found_matches = []
+    potential_matches = []
+
+    #only check for compatibility on the items because that represents the people who have yet to be matched
+    for m_number, m_model in male_models.items():
+        for w_number, w_model in female_models.items():
+            m_score = compatibility_score(men[m_number].traits, w_model.get_expected_preferences())
+            w_score = compatibility_score(women[w_number].traits, m_model.get_expected_preferences())
+
+            m_mean = np.mean(m_model.get_preference_confidence())
+            w_mean = np.mean(w_model.get_preference_confidence())
+            #compatibility has to be high enough and model has to be confident enough on both predictions
+            if min(w_score, m_score) > t and min(m_mean, w_mean) > conf_t:
+                potential_matches.append(((m_number, w_number), min(w_score, m_score)))
+
+
+
+    #sort the cumulative list of all the models and scores
+    potential_matches.sort(key=lambda x: x[1], reverse=True)
+
+    matched_men = set()
+    matched_women = set()
+
+#look at the most compatible matched and add them to the list of found matches
+    for match in potential_matches:
+        if match[0][0] not in matched_men and match[0][1] not in matched_women:
+            found_matches.append((match[0][0], match[0][1]))
+            matched_men.add(match[0][0])
+            matched_women.add(match[0][1])
+
+    return found_matches
+
+#implement the round based structure with swipes per round and number of rounds specified. At the end of each round take the min 
+#of the mutual compability score and if above threshold with certain amount of confidence, remove from the sample and continue
+def round_structure(swipes_per_round = 10, num_rounds = 2, comp_t = 0.7, confidence_t = 0.3):
+    if num_rounds <= 0:
+        return
+
+    matches = []  #list of men and women indexed by id who are matched and removed from the pool of people
+
+    male_dict = {}  #map each man to their model for training
+    female_dict = {}
+
+    #initialize the models with the user and empty preferences
+    for m in men:
+        male_dict[m.id] = create_user_model(m, initial_preferences=None)
+
+    for w in women:
+        female_dict[w.id] = create_user_model(w, initial_preferences=None)
+
+
+
+    for i in range(num_rounds):
+        for m_index in male_dict.keys():
+            simulate_learning(men[m_index], women, n_swipes=swipes_per_round, swipe_heuristic=min_fit_heuristic,
+                          learning_rates=[0.25, 0.2, 0.15, 0.1, 0.05], model = male_dict[m_index])
+        for w_index in female_dict.keys():
+            simulate_learning(women[w_index], men, n_swipes=swipes_per_round, swipe_heuristic=min_fit_heuristic,
+                          learning_rates=[0.25, 0.2, 0.15, 0.1, 0.05], model=female_dict[w_index])
+
+        fm = threshold_matches(male_dict, female_dict, comp_t, confidence_t)
+
+        # remove from dating pool if matched
+        for m_index, w_index in fm:
+            male_dict.pop(m_index, None)
+            female_dict.pop(w_index, None)
+
+        #right now we don't remove the ability to swipe on people who have been matched already but you can't match with them
+        #and we don't further train their models, see if that is the desired behavior
+
+        matches = list(set(matches).union(fm))
+
+    return matches
+
+
 def analyze_learning_results(results):
     """
     Analyze and print results from simulated learning
@@ -244,6 +371,7 @@ def analyze_learning_results(results):
     final_confidence = results[-1]['confidence']
     print(f"Final confidence: {np.mean(final_confidence):.4f}")
 
+    #take the last one as that is the final one after all the rounds of learning
     print("\nTrue vs. Learned Preferences:")
     true_prefs = results[-1]['true_preferences']
     learned_prefs = results[-1]['learned_preferences']
@@ -267,7 +395,7 @@ def test_preference_learning():
     print(f"True preferences: {test_user.preferences}")
 
     # Run simulation
-    model, results = simulate_learning(test_user, potential_matches, n_swipes=20)
+    model, results = simulate_learning(test_user, potential_matches, n_swipes=10, swipe_heuristic=min_fit_heuristic, learning_rates=[0.25,0.2,0.15,0.1,0.05])
 
     # Analyze results
     analyze_learning_results(results)
@@ -287,4 +415,6 @@ def test_preference_learning():
 
 
 if __name__ == "__main__":
-    test_preference_learning()
+    matches = round_structure()
+    print("matches: " + str(matches))
+
