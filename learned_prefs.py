@@ -1,6 +1,7 @@
 import numpy as np
-from lovers import men, women
+from lovers import men, women, Man, Woman
 from prob_swipe import compatibility_score, swipe_probability
+from sklearn.preprocessing import MinMaxScaler
 from itertools import product
 
 
@@ -8,7 +9,7 @@ class PreferenceModel:
     """
     Model to learn user preferences based on swipe history
     """
-    def __init__(self, initial_preferences=None, learning_rate=0.2, regularization=0.02):
+    def __init__(self, i_d, initial_preferences=None, learning_rate=0.2, regularization=0.02):
         """
         Initialize preference learning model
 
@@ -22,8 +23,9 @@ class PreferenceModel:
         self.learning_rate = learning_rate
         self.regularization = regularization
         self.swipe_history = []
+        self.id = i_d
 
-    def update_preferences(self, profile, swipe_right):
+    def update_preferences(self, profile, swipe_right, men_val = False):
         """
         Update preferences based on a new swipe
 
@@ -47,6 +49,20 @@ class PreferenceModel:
 
         # Update preferences using gradient descent
         self.preferences += self.learning_rate * gradient
+
+        for i in range(len(self.preferences)):
+            if self.preferences[i] > 1:
+                self.preferences[i] =1
+            elif self.preferences[i] < 0:
+                self.preferences[i] = 0
+
+        #self.preferences= [min(max(x, 0), 1) for x in self.preferences]
+
+        if self.id == 0:
+            print("update prefs: " + " id: " + str(self.id) + ": " + str(self.preferences))
+            print("person that updated: " + str(profile.traits) + " swipe right: " + str(swipe_right))
+            print()
+
 
         # Ensure preferences stay within range [0, 1]
         self.preferences = np.clip(self.preferences, 0, 1)
@@ -81,6 +97,9 @@ class PreferenceModel:
         # Combine direction, regularization, and adaptive weighting
         gradient = direction * regularized_diff * weight
 
+        #new update more aggressive
+        #gradient = direction * regularized_diff
+
         return gradient
 
     def get_expected_preferences(self):
@@ -103,7 +122,7 @@ class PreferenceModel:
             return 0.5
 
         # Compatibility score
-        score = compatibility_score(profile.traits, self.preferences, exponent=4)
+        score = compatibility_score(profile.traits, self.preferences, exponent=.5)
 
         # Sigmoid transformation
         alpha = 8
@@ -166,8 +185,8 @@ class PreferenceModel:
         for swipe in self.swipe_history:
             swipe_list.append(swipe['profile_id'])
         potential_matches = [x for x in potential_matches if x.id not in swipe_list]
-        best_index = min(enumerate(potential_matches), key=lambda x: swipe_heuristic(self.preferences, x[1].traits))[0]
-        return best_index
+        best_index = min(potential_matches, key=lambda x: swipe_heuristic(self.preferences, x.traits))
+        return best_index.id
 
 #return value that is the distance between the traits and prefs (can generalize to weighted min fit later)
 #make sure the heuristics don't allow you to swipe on people you have seen before
@@ -177,7 +196,7 @@ def min_fit_heuristic(prefs, traits):
 def max_fit_heuristic(prefs, traits):
     return -1 * np.sum(np.abs(prefs - traits))
 
-def create_user_model(user, initial_preferences=None, regularization = None):
+def create_user_model(user, index, initial_preferences=None, regularization = None):
     """
     Create a preference model for a user
 
@@ -191,17 +210,15 @@ def create_user_model(user, initial_preferences=None, regularization = None):
     # If initial preferences not provided, use the user's actual preferences
     # with some random noise to simulate imperfect self-awareness
     if initial_preferences is None:
-        noise = np.random.normal(0, 0.1, len(user.preferences))
-        noisy_preferences = user.preferences + noise
-        initial_preferences = np.clip(noisy_preferences, 0, 1)
+        initial_preferences = np.random.uniform(0.45, 0.55, len(user.preferences))
 
     if regularization == None:
-        return PreferenceModel(initial_preferences)
+        return PreferenceModel(initial_preferences=initial_preferences, i_d=index)
     else:
-        return PreferenceModel(initial_preferences, regularization)
+        return PreferenceModel(initial_preferences=initial_preferences, i_d=index, regularization = regularization)
 
 
-def simulate_learning(user, potential_matches, n_swipes=30, swipe_heuristic = None, learning_rates = None, model = None):
+def simulate_learning(user, potential_matches, n_swipes=30, swipe_heuristic = None, learning_rates = None, model = None, men_val = False):
     """
     Simulate preference learning through a series of swipes
 
@@ -216,7 +233,7 @@ def simulate_learning(user, potential_matches, n_swipes=30, swipe_heuristic = No
     """
     # Create model with no initial knowledge of preferences
     if model == None:
-        model = create_user_model(user, initial_preferences=None)
+        model = create_user_model(user, user.id, initial_preferences=None)
 
     # Track results for analysis
     results = []
@@ -258,7 +275,9 @@ def simulate_learning(user, potential_matches, n_swipes=30, swipe_heuristic = No
         swipe_right = np.random.random() < swipe_prob
 
         # Update model with this swipe
-        model.update_preferences(profile, swipe_right)
+        if model.id == 0:
+            print("user prefs: " + str(user.preferences))
+        model.update_preferences(profile, swipe_right, men_val = men_val)
 
         # Record results
         results.append({
@@ -313,6 +332,7 @@ def threshold_matches(male_models, female_models, t, conf_t):
 #implement the round based structure with swipes per round and number of rounds specified. At the end of each round take the min 
 #of the mutual compability score and if above threshold with certain amount of confidence, remove from the sample and continue
 def round_structure(swipes_per_round = 10, num_rounds = 2, comp_t = 0.7, confidence_t = 0.3):
+    # men[0].preferences = [.9,.9,.9,.9,.1]
     if num_rounds <= 0:
         return
 
@@ -322,21 +342,21 @@ def round_structure(swipes_per_round = 10, num_rounds = 2, comp_t = 0.7, confide
     female_dict = {}
 
     #initialize the models with the user and empty preferences
-    for m in men:
-        male_dict[m.id] = create_user_model(m, initial_preferences=None)
+    for index,m in enumerate(men):
+        male_dict[m.id] = create_user_model(m, index, initial_preferences=None)
 
-    for w in women:
-        female_dict[w.id] = create_user_model(w, initial_preferences=None)
+    for index,w in enumerate(women):
+        female_dict[w.id] = create_user_model(w, index, initial_preferences=None)
 
 
 
     for i in range(num_rounds):
         for m_index in male_dict.keys():
             simulate_learning(men[m_index], women, n_swipes=swipes_per_round, swipe_heuristic=min_fit_heuristic,
-                          learning_rates=[0.25, 0.2, 0.15, 0.1, 0.05], model = male_dict[m_index])
+                          learning_rates=None, model = male_dict[m_index], men_val = True)
         for w_index in female_dict.keys():
             simulate_learning(women[w_index], men, n_swipes=swipes_per_round, swipe_heuristic=min_fit_heuristic,
-                          learning_rates=[0.25, 0.2, 0.15, 0.1, 0.05], model=female_dict[w_index])
+                          learning_rates=None, model=female_dict[w_index], men_val = False)
 
         fm = threshold_matches(male_dict, female_dict, comp_t, confidence_t)
 
@@ -382,6 +402,51 @@ def analyze_learning_results(results):
               f"Confidence={final_confidence[i]:.4f}")
 
 
+def test_convergence(preferences,num_swipes = 1000, modified_lr = False):
+
+    m = Man(0,[0,0,0,0,0], preferences)
+
+    model = create_user_model(m, m.id)
+
+    for i in range(num_swipes):
+
+        # Parameters
+        length = 5  # Number of values you want
+        mean = 0.5
+        std_dev = 0.2
+
+        values = np.random.normal(loc=mean, scale=std_dev, size=length)
+        clipped_values = np.clip(values, 0, 1)  # Force values into [0, 1] range
+
+        print(clipped_values.tolist())
+
+        # Convert to a list if needed
+        values_list = values.tolist()
+
+        #generate a random person
+        profile = Woman(0,[0,0,0,0,0],values_list)
+
+        true_compatibility = compatibility_score(profile.traits, m.preferences, exponent=0.5)
+
+        # Apply sigmoid to get probability
+        alpha = 10
+        threshold = 0.65
+        sigmoid_input = (true_compatibility - threshold) * alpha
+        swipe_prob = 1 / (1 + np.exp(-sigmoid_input))
+
+        # Determine swipe direction (with some randomness)
+        swipe_right = np.random.random() < swipe_prob
+
+        # Update model with this swipe
+        if model.id == 0:
+            print("user prefs: " + str(m.preferences))
+        model.update_preferences(profile, swipe_right, men_val=True)
+
+        if modified_lr:
+            if model.learning_rate >= 0.05:
+                model.learning_rate -= 0.005
+
+
 def test_preference_learning():
     """
     Test the preference learning algorithm
@@ -395,7 +460,7 @@ def test_preference_learning():
     print(f"True preferences: {test_user.preferences}")
 
     # Run simulation
-    model, results = simulate_learning(test_user, potential_matches, n_swipes=10, swipe_heuristic=min_fit_heuristic, learning_rates=[0.25,0.2,0.15,0.1,0.05])
+    model, results = simulate_learning(test_user, potential_matches, n_swipes=10, swipe_heuristic=min_fit_heuristic, learning_rates=[0.2,0.1,0.05])
 
     # Analyze results
     analyze_learning_results(results)
@@ -405,7 +470,7 @@ def test_preference_learning():
     predicted_prob = model.predict_swipe(new_profile)
 
     # Calculate true compatibility
-    true_swipe = swipe_probability(new_profile.traits, test_user.preferences)
+    true_swipe = swipe_probability(test_user.preferences, new_profile.traits)
 
     print("\n=== Swipe Prediction Test ===")
     print(f"Profile: Woman {new_profile.id}")
@@ -415,6 +480,17 @@ def test_preference_learning():
 
 
 if __name__ == "__main__":
-    matches = round_structure()
-    print("matches: " + str(matches))
+    length = 5  # Number of values you want
+    mean = 0.5
+    std_dev = 0.2
+
+    values = np.random.normal(loc=mean, scale=std_dev, size=length)
+    clipped_values = np.clip(values, 0, 1)  # Force values into [0, 1] range
+
+    print(clipped_values.tolist())
+
+    # Convert to a list if needed
+    values_list = values.tolist()
+    test_convergence(values_list,1000,modified_lr = True)
+    # print("matches: " + str(matches))
 

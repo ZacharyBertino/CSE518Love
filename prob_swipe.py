@@ -2,7 +2,7 @@ import numpy as np
 from lovers import men, women
 
 
-def compatibility_score(traits, preferences, exponent=3):
+def compatibility_score(traits, preferences, exponent=.5):
     """
     Compute compatibility score
 
@@ -15,7 +15,7 @@ def compatibility_score(traits, preferences, exponent=3):
     - Score between 0 and 1, where 1 is perfect match
     """
     # Calculate normalized differences
-    differences = np.abs(traits - preferences)
+    differences = np.abs(np.array(traits) - np.array(preferences))
 
     # Apply exponential weighting
     weighted_differences = differences ** exponent
@@ -56,7 +56,7 @@ def trait_compatibility_distribution(traits, preferences):
     }
 
 
-def swipe_probability(preferences1, traits2, base_exponent=2, threshold=0.75, alpha=12):
+def swipe_probability(preferences1, traits2, base_exponent=3, threshold=0.75, alpha=12):
     """
     Compute probability of swiping right
 
@@ -84,9 +84,8 @@ def swipe_probability(preferences1, traits2, base_exponent=2, threshold=0.75, al
         adjusted_score += 0.05 * (distribution["excellent"] / distribution["total"])
 
         # Bonus for having multiple goof matches
-        if distribution["good"] >= 2:
-            adjusted_score += 0.02 * (distribution["good"] / distribution["total"])
-        #TODO: why is this if statement nested?
+    if distribution["good"] >= 2:
+        adjusted_score += 0.02 * (distribution["good"] / distribution["total"])
 
     # Penalty for poor matches
     if distribution["poor"] > 0:
