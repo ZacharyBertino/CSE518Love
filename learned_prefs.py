@@ -57,10 +57,10 @@ class PreferenceModel:
 
         #self.preferences= [min(max(x, 0), 1) for x in self.preferences]
 
-        if self.id == 0:
-            print("update prefs: " + " id: " + str(self.id) + ": " + str(self.preferences))
-            print("person that updated: " + str(profile.traits) + " swipe right: " + str(swipe_right))
-            print()
+        # if self.id == 0:
+        #     print("update prefs: " + " id: " + str(self.id) + ": " + str(self.preferences))
+        #     print("person that updated: " + str(profile.traits) + " swipe right: " + str(swipe_right))
+        #     print()
 
 
         # Ensure preferences stay within range [0, 1]
@@ -92,6 +92,8 @@ class PreferenceModel:
         else:
             # Adjustment for traits that are close
             weight = 1 - np.abs(difference) + 0.1
+        
+       #weight = 0.5
 
         # Combine direction, regularization, and adaptive weighting
         gradient = direction * regularized_diff * weight
@@ -101,6 +103,9 @@ class PreferenceModel:
 
         return gradient
 
+
+
+    
     def get_expected_preferences(self):
         """
         Return the current learned preferences
@@ -417,7 +422,7 @@ def test_convergence(preferences,num_swipes = 1000, modified_lr = False):
         values = np.random.normal(loc=mean, scale=std_dev, size=length)
         clipped_values = np.clip(values, 0, 1)  # Force values into [0, 1] range
 
-        print(clipped_values.tolist())
+        # print(clipped_values.tolist())
 
         # Convert to a list if needed
         values_list = values.tolist()
@@ -427,7 +432,7 @@ def test_convergence(preferences,num_swipes = 1000, modified_lr = False):
 
 
         true_compatibility = compatibility_score(profile.traits, m.preferences, exponent=0.5)
-        print("Current Compatability: " + str(true_compatibility))
+                    # print("Current Compatability: " + str(true_compatibility))
         # Apply sigmoid to get probability
         alpha = 10
         threshold = 0.65
@@ -444,21 +449,22 @@ def test_convergence(preferences,num_swipes = 1000, modified_lr = False):
 
 
         # Update model with this swipe
-        if model.id == 0:
-            print("user prefs: " + str(m.preferences))
+        # if model.id == 0:
+        #     print("user prefs: " + str(m.preferences))
         model.update_preferences(profile, swipe_right, men_val=True)
 
         if modified_lr:
             # if model.learning_rate >= 0.01:
             #     model.learning_rate -= 0.0005
-            
+
+            model.learning_rate = ((num_swipes - i) / num_swipes) * model.learning_rate
 
 
 
     print(model.preferences)
     print(preferences)
     
-    print("End Compatability: " + str(compatibility_score(model.preferences, preferences)))
+    print("End Compatability: " + str(1 - compatibility_score(model.preferences, preferences)))
     print("End Results: " + str(analyze_match(model.preferences, preferences)))
 
 
@@ -504,7 +510,7 @@ def euclidean_compatibility(v1, v2):
 if __name__ == "__main__":
     length = 5  # Number of values you want
     mean = 0.5
-    std_dev = 0.2
+    std_dev = 0.15
 
     values = np.random.normal(loc=mean, scale=std_dev, size=length)
     clipped_values = np.clip(values, 0, 1)  # Force values into [0, 1] range
@@ -513,12 +519,12 @@ if __name__ == "__main__":
 
     # Convert to a list if needed
     values_list = values.tolist()
-    values_list = [0.7,.7,.7,.7,.7]
+    #values_list = [0.7,.7,.7,.7,.7]
 
     print("\n----------------------------------------------------------")
     print("--------------------- Beginning Test ---------------------")
     print("---------------------------------------------------------- \n")
-    test_convergence(values_list,10000,modified_lr = True)
+    test_convergence(values_list,2000,modified_lr = True)
 
     # print("matches: " + str(matches))
 
