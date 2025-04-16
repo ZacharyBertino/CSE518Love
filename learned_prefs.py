@@ -2,13 +2,14 @@ import numpy as np
 from lovers import men, women, Man, Woman
 from prob_swipe import compatibility_score, swipe_probability, analyze_match
 from itertools import product
+import random
 
 
 class PreferenceModel:
     """
     Model to learn user preferences based on swipe history
     """
-    def __init__(self, i_d, initial_preferences=None, learning_rate=0.2, regularization=0.02):
+    def __init__(self, i_d, initial_preferences=None, learning_rate=0.4, regularization=0.02):
         """
         Initialize preference learning model
 
@@ -440,11 +441,12 @@ def test_convergence(preferences,num_swipes = 1000, modified_lr = False):
         swipe_prob = 1 / (1 + np.exp(-sigmoid_input))
 
         # Determine swipe direction (with some randomness)
+        #swipe_right = random.random() > swipe_prob
+
+        #no randomness
         swipe_right = 0.5 > swipe_prob
 
-        # true_compatibility = euclidean_compatibility(profile.traits, m.preferences)
-        # print("Compatability: " + str(true_compatibility))
-        # swipe_right = true_compatibility > 0.35
+
 
 
 
@@ -519,12 +521,12 @@ if __name__ == "__main__":
 
     # Convert to a list if needed
     values_list = values.tolist()
-    #values_list = [0.7,.7,.7,.7,.7]
+    values_list = [0.7,.7,.7,.7,.7]
 
     print("\n----------------------------------------------------------")
     print("--------------------- Beginning Test ---------------------")
     print("---------------------------------------------------------- \n")
-    test_convergence(values_list,2000,modified_lr = True)
+    test_convergence(values_list,50,modified_lr = True)
 
     # print("matches: " + str(matches))
 
