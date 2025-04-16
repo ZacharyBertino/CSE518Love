@@ -15,13 +15,19 @@ def compatibility_score(traits, preferences, exponent=.5):
     - Score between 0 and 1, where 1 is perfect match
     """
     # Calculate normalized differences
+    differencesInner = 0
+
+    for i in range(len(traits)):
+        differencesInner += (traits[i] - preferences[i])**2
+
     differences = np.abs(np.array(traits) - np.array(preferences))
 
     # Apply exponential weighting
     weighted_differences = differences ** exponent
 
     # Calculate final score
-    return 1 - np.mean(weighted_differences)
+    return differencesInner**0.5
+    #return 1 - np.mean(weighted_differences)
 
 
 def trait_compatibility_distribution(traits, preferences):
@@ -66,10 +72,18 @@ def swipe_probability(preferences1, traits2, base_exponent=3, threshold=0.75, al
     - base_exponent: Base exponent for compatibility calculation
     - threshold: Middle point of sigmoid curve
     - alpha: Steepness of sigmoid curve
+    
 
     Returns:
     - Probability of right swipe (0 to 1)
     """
+    compat = compatibility_score(traits2, preferences1)
+    print("Compatability: " + str(compat))
+    if compat >= 1.2:
+        return 1
+
+    else:
+        return 0
     # Check for perfect match
     if np.allclose(preferences1, traits2, atol=0.05):
         return 0.98

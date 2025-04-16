@@ -1,7 +1,6 @@
 import numpy as np
 from lovers import men, women, Man, Woman
-from prob_swipe import compatibility_score, swipe_probability
-from sklearn.preprocessing import MinMaxScaler
+from prob_swipe import compatibility_score, swipe_probability, analyze_match
 from itertools import product
 
 
@@ -426,8 +425,9 @@ def test_convergence(preferences,num_swipes = 1000, modified_lr = False):
         #generate a random person
         profile = Woman(0,[0,0,0,0,0],values_list)
 
-        true_compatibility = compatibility_score(profile.traits, m.preferences, exponent=0.5)
 
+        true_compatibility = compatibility_score(profile.traits, m.preferences, exponent=0.5)
+        print("Current Compatability: " + str(true_compatibility))
         # Apply sigmoid to get probability
         alpha = 10
         threshold = 0.65
@@ -435,7 +435,13 @@ def test_convergence(preferences,num_swipes = 1000, modified_lr = False):
         swipe_prob = 1 / (1 + np.exp(-sigmoid_input))
 
         # Determine swipe direction (with some randomness)
-        swipe_right = np.random.random() < swipe_prob
+        swipe_right = 0.5 > swipe_prob
+
+        # true_compatibility = euclidean_compatibility(profile.traits, m.preferences)
+        # print("Compatability: " + str(true_compatibility))
+        # swipe_right = true_compatibility > 0.35
+
+
 
         # Update model with this swipe
         if model.id == 0:
@@ -443,8 +449,17 @@ def test_convergence(preferences,num_swipes = 1000, modified_lr = False):
         model.update_preferences(profile, swipe_right, men_val=True)
 
         if modified_lr:
-            if model.learning_rate >= 0.05:
-                model.learning_rate -= 0.005
+            # if model.learning_rate >= 0.01:
+            #     model.learning_rate -= 0.0005
+            
+
+
+
+    print(model.preferences)
+    print(preferences)
+    
+    print("End Compatability: " + str(compatibility_score(model.preferences, preferences)))
+    print("End Results: " + str(analyze_match(model.preferences, preferences)))
 
 
 def test_preference_learning():
@@ -478,6 +493,13 @@ def test_preference_learning():
     print(f"Predicted right swipe probability: {predicted_prob:.4f}")
     print(f"True right swipe probability: {true_swipe:.4f}")
 
+def euclidean_compatibility(v1, v2):
+    # Max possible distance for 5 traits is sqrt(5)
+    distance = np.linalg.norm(np.array(v1) - np.array(v2))
+    max_distance = np.sqrt(len(v1))  # sqrt(5) if length = 5
+    score = 1 - (distance / max_distance)  # now 1 = perfect match, 0 = worst
+    return score
+
 
 if __name__ == "__main__":
     length = 5  # Number of values you want
@@ -491,6 +513,12 @@ if __name__ == "__main__":
 
     # Convert to a list if needed
     values_list = values.tolist()
-    test_convergence(values_list,1000,modified_lr = True)
+    values_list = [0.7,.7,.7,.7,.7]
+
+    print("\n----------------------------------------------------------")
+    print("--------------------- Beginning Test ---------------------")
+    print("---------------------------------------------------------- \n")
+    test_convergence(values_list,10000,modified_lr = True)
+
     # print("matches: " + str(matches))
 
