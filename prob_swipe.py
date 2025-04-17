@@ -1,7 +1,7 @@
 import numpy as np
 from lovers import men, women
 
-
+#modified to currently do euclidean distance instead of element wise
 def compatibility_score(traits, preferences, exponent=.5):
     """
     Compute compatibility score
