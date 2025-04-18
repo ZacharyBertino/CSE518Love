@@ -250,7 +250,7 @@ def simulate_learning(user, potential_matches, current_swipes, total_swipes, n_s
     # Simulate swipes
     #trying to add in dynamic learning rate to get close to best fits before slowing down
     for i in range(min(n_swipes, len(matches))):
-        if swipe_heuristic == None:
+        if swipe_heuristic is None:
             profile = matches[i]
         else:
             profile_index = model.find_next_swipe(potential_matches=potential_matches, swipe_heuristic=swipe_heuristic)
@@ -292,19 +292,19 @@ def simulate_learning(user, potential_matches, current_swipes, total_swipes, n_s
 
 
 #return pairs of ids (male,female) for those who have been matched and therefore removed from the pool of potential matches
-def threshold_matches(male_models, female_models, t, conf_t):
+def threshold_matches(male_models, female_models, t, conf_t, male_active, female_active):
 
     found_matches = []
     potential_matches = []
 
     #only check for compatibility on the items because that represents the people who have yet to be matched
-    for m_number, m_model in male_models.items():
-        for w_number, w_model in female_models.items():
-            m_score = compatibility_score(men[m_number].traits, w_model.get_expected_preferences())
-            w_score = compatibility_score(women[w_number].traits, m_model.get_expected_preferences())
+    for m_number in male_active:
+        for w_number in female_active:
+            m_score = compatibility_score(men[m_number].traits, female_models[w_number].get_expected_preferences())
+            w_score = compatibility_score(women[w_number].traits, male_models[m_number].get_expected_preferences())
 
-            m_mean = np.mean(m_model.get_preference_confidence())
-            w_mean = np.mean(w_model.get_preference_confidence())
+            m_mean = np.mean(male_models[m_number].get_preference_confidence())
+            w_mean = np.mean(female_models[w_number].get_preference_confidence())
             #compatibility has to be high enough and model has to be confident enough on both predictions
             if min(w_score, m_score) > t and min(m_mean, w_mean) > conf_t:
                 potential_matches.append(((m_number, w_number), min(w_score, m_score)))
@@ -345,22 +345,23 @@ def round_structure(swipes_per_round = 10, num_rounds = 2, comp_t = 0.7, confide
     for index,w in enumerate(women):
         female_dict[w.id] = create_user_model(w, index, initial_preferences=None)
 
-
+    male_active = list(range(len(men)))
+    female_active = list(range(len(women)))
 
     for i in range(num_rounds):
-        for m_index in male_dict.keys():
+        for m_index in male_active:
             simulate_learning(men[m_index], women, n_swipes=swipes_per_round, current_swipes=i * swipes_per_round, total_swipes=num_rounds * swipes_per_round,
                               swipe_heuristic=min_fit_heuristic, model = male_dict[m_index], men_val = True)
-        for w_index in female_dict.keys():
+        for w_index in female_active:
             simulate_learning(women[w_index], men, n_swipes=swipes_per_round, current_swipes=i * swipes_per_round, total_swipes=num_rounds * swipes_per_round,
                               swipe_heuristic=min_fit_heuristic, model=female_dict[w_index], men_val = False)
 
-        fm = threshold_matches(male_dict, female_dict, comp_t, confidence_t)
+        fm = threshold_matches(male_dict, female_dict, comp_t, confidence_t,male_active, female_active)
 
         # remove from dating pool if matched
         for m_index, w_index in fm:
-            male_dict.pop(m_index, None)
-            female_dict.pop(w_index, None)
+            male_active.remove(m_index)
+            female_active.remove(w_index)
 
         #right now we don't remove the ability to swipe on people who have been matched already but you can't match with them
         #and we don't further train their models, see if that is the desired behavior
@@ -372,10 +373,9 @@ def round_structure(swipes_per_round = 10, num_rounds = 2, comp_t = 0.7, confide
     score_dict = {}
     #first go through all matches and compare their compatibility with true compatibility
     for m in matches:
-        model_score = min(compatibility_score(men[m[0]].traits,female_dict[m[1]].get_expected_preferences()),
-            compatibility_score(women[m[1]].traits, male_dict[m[0]].get_expected_preferences()))
-        real_score = min(compatibility_score(men[m[0]].traits,women[m[1]].preferences),
-            compatibility_score(women[m[1]].traits, men[m[0]].preferences))
+        print("m: " + str(m[0]) + " f: " + str(m[1]))
+        model_score = min(compatibility_score(men[m[0]].traits,female_dict[m[1]].get_expected_preferences()),compatibility_score(women[m[1]].traits, male_dict[m[0]].get_expected_preferences()))
+        real_score = min(compatibility_score(men[m[0]].traits,women[m[1]].preferences),compatibility_score(women[m[1]].traits, men[m[0]].preferences))
         score_dict[m] = model_score - real_score
 
     #next calculate the general MSE between the learned and real prefs for each person
@@ -402,19 +402,40 @@ def calculate_real_matches(men,women, threshold):
     for w in women:
         f_match_dict[w.id] = set()
 
-    for m in men:
-        for w in women:
-            if min(compatibility_score(men[m.id].traits, women[w.id].preferences),
-                   compatibility_score(women[w.id].traits, men[m.id].preferences)) > threshold:
-                match_men = m_match_dict[m.id]
-                match_men.add(w.id)
-                m_match_dict[m.id] = match_men
+    for m,w in product(men,women):
+        if compatibility_score(men[m.id].traits, women[w.id].preferences) > threshold:
+            #match for women
+            match_woman = f_match_dict[w.id]
+            match_woman.add(m.id)
+            f_match_dict[w.id] = match_woman
 
-                match_woman = f_match_dict[w.id]
-                match_woman.add(m.id)
-                f_match_dict[w.id] = match_woman
+        if compatibility_score(women[w.id].traits, men[m.id].preferences) > threshold:
+            #match for men
+            match_men = m_match_dict[m.id]
+            match_men.add(w.id)
+            m_match_dict[m.id] = match_men
+
+
+
 
     return (m_match_dict, f_match_dict)
+
+#compare the matches from the real possiblity to that found by the algorithm
+def compare_matches(female_real, male_real, derived_matches):
+    if len(derived_matches) == 0:
+        return 0.0
+    correct = 0.0
+    partial_correct = 0.0
+    for m in derived_matches:
+        if m[1] in male_real[m[0]] and m[0] in female_real[m[1]]:
+            correct += 1
+        elif m[1] in male_real[m[0]] or m[0] in female_real[m[1]]:
+            partial_correct += 1
+
+    print("correct percentage: " + str(float(correct) / float(len(derived_matches))))
+    print("partial percentage: " + str(float(partial_correct) / float(len(derived_matches))))
+
+    return float(correct) / float(len(derived_matches))
 
 def analyze_learning_results(results):
     """
@@ -565,12 +586,14 @@ if __name__ == "__main__":
     print("--------------------- Beginning Test ---------------------")
     print("---------------------------------------------------------- \n")
     #test_convergence(values_list,50,modified_lr = True)
-    # matches = round_structure()
-    # print(matches)
+    matches = round_structure(comp_t = 0.5)
+    print(matches)
 
     m_match_dict, f_match_dict = calculate_real_matches(men,women,0.5)
     print("men matches: " + str(m_match_dict))
     print("female matches: " + str(f_match_dict))
+
+    print("match accuracy: " + str(compare_matches(m_match_dict, f_match_dict, matches)))
 
     # print("matches: " + str(matches))
 
