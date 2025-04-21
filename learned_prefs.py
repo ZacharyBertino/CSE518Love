@@ -1,7 +1,7 @@
 import numpy as np
 from lovers import men, women, Man, Woman
-from prob_swipe import compatibility_score, swipe_probability, analyze_match
-from sklearn.metrics import mean_squared_error
+from prob_swipe import compatibility_score, end_compatibility_score, swipe_probability, analyze_match, soft_accuracy, accuracy
+# from sklearn.metrics import mean_squared_error
 from itertools import product
 import random
 
@@ -238,7 +238,11 @@ def simulate_learning(user, potential_matches, current_swipes, total_swipes, n_s
     - List of swipe results
     """
     # Create model with no initial knowledge of preferences
+
+
+
     if model == None:
+        print("here")
         model = create_user_model(user, user.id, initial_preferences=None)
 
     # Track results for analysis
@@ -246,21 +250,37 @@ def simulate_learning(user, potential_matches, current_swipes, total_swipes, n_s
 
     matches = potential_matches.copy()
 
+    #stimulate
 
+    if(user.id == 0):
+        print(user.id)
+        print("real: " + str(user.preferences))
+        print("men" + str(men_val))
     # Simulate swipes
     #trying to add in dynamic learning rate to get close to best fits before slowing down
+
     for i in range(min(n_swipes, len(matches))):
+        if(user.id == 0):
+            print("accuracy: " + str(compatibility_score(user.preferences, model.preferences)))
+            print(model.preferences)
         if swipe_heuristic is None:
             profile = matches[i]
         else:
             profile_index = model.find_next_swipe(potential_matches=potential_matches, swipe_heuristic=swipe_heuristic)
             profile = matches[profile_index]
+        
+        if(user.id == 0):
+            print(profile)
 
-        model.learning_rate = ((total_swipes - (i+current_swipes)) / total_swipes) * model.learning_rate
+        # model.learning_rate = 0.1
+        ## print(model.learning_rate)
+        model.learning_rate = ((min(n_swipes, len(matches)) - i) / min(n_swipes, len(matches))) * model.learning_rate
         
 
         # Calculate true swipe probability based on user's actual preferences
         true_compatibility = compatibility_score(profile.traits, user.preferences, exponent=0.5)
+
+       
 
         # Apply sigmoid to get probability
         alpha = 10
@@ -269,7 +289,12 @@ def simulate_learning(user, potential_matches, current_swipes, total_swipes, n_s
         swipe_prob = 1 / (1 + np.exp(-sigmoid_input))
 
         # Determine swipe direction (with some randomness)
-        swipe_right = np.random.random() < swipe_prob
+        swipe_right = 0.5 > swipe_prob
+
+        # if(user.id == 0):
+        #     print("swiping")
+        #     print(true_compatibility)
+        #     print(swipe_prob)
 
         # Update model with this swipe
         # if model.id == 0:
@@ -287,12 +312,14 @@ def simulate_learning(user, potential_matches, current_swipes, total_swipes, n_s
             'preference_error': np.mean(np.abs(model.preferences - user.preferences)),
             'confidence': model.get_preference_confidence()
         })
-
+    
     return model, results
 
 
 #return pairs of ids (male,female) for those who have been matched and therefore removed from the pool of potential matches
 def threshold_matches(male_models, female_models, t, conf_t, male_active, female_active):
+
+    print(male_models[0].preferences)
 
     found_matches = []
     potential_matches = []
@@ -300,8 +327,8 @@ def threshold_matches(male_models, female_models, t, conf_t, male_active, female
     #only check for compatibility on the items because that represents the people who have yet to be matched
     for m_number in male_active:
         for w_number in female_active:
-            m_score = compatibility_score(men[m_number].traits, female_models[w_number].get_expected_preferences())
-            w_score = compatibility_score(women[w_number].traits, male_models[m_number].get_expected_preferences())
+            m_score = accuracy(men[m_number].traits, female_models[w_number].get_expected_preferences())
+            w_score = accuracy(women[w_number].traits, male_models[m_number].get_expected_preferences())
 
             m_mean = np.mean(male_models[m_number].get_preference_confidence())
             w_mean = np.mean(female_models[w_number].get_preference_confidence())
@@ -341,12 +368,21 @@ def round_structure(swipes_per_round = 10, num_rounds = 2, comp_t = 0.7, confide
     #initialize the models with the user and empty preferences
     for index,m in enumerate(men):
         male_dict[m.id] = create_user_model(m, index, initial_preferences=None)
+        male_dict[m.id].preferences = test_convergence(men[m.id].preferences, 50, True)
+        # if index == 1:
+        #      print(male_dict[m.id].preferences)
+        #      print(men[m.id].preferences)
+
 
     for index,w in enumerate(women):
         female_dict[w.id] = create_user_model(w, index, initial_preferences=None)
+        female_dict[w.id].preferences = test_convergence(women[w.id].preferences, 50, True)
 
     male_active = list(range(len(men)))
     female_active = list(range(len(women)))
+
+
+    
 
     for i in range(num_rounds):
         for m_index in male_active:
@@ -381,10 +417,10 @@ def round_structure(swipes_per_round = 10, num_rounds = 2, comp_t = 0.7, confide
     #next calculate the general MSE between the learned and real prefs for each person
     m_error_dict = {}
 
-    m_mse = mean_squared_error([men[m.id].preferences for m in men],
-                               [male_dict[m.id].get_expected_preferences() for m in men])
-    w_mse = mean_squared_error([women[m.id].preferences for m in women],
-                               [female_dict[m.id].get_expected_preferences() for m in women])
+    m_mse = np.mean(np.square(([men[m.id].preferences for m in men],
+                               [male_dict[m.id].get_expected_preferences() for m in men])))
+    w_mse = np.mean(np.square(([women[m.id].preferences for m in women],
+                               [female_dict[m.id].get_expected_preferences() for m in women])))
 
     print("female mse: " + str(w_mse))
     print("male mse: " + str(m_mse))
@@ -403,13 +439,13 @@ def calculate_real_matches(men,women, threshold):
         f_match_dict[w.id] = set()
 
     for m,w in product(men,women):
-        if compatibility_score(men[m.id].traits, women[w.id].preferences) > threshold:
+        if accuracy(men[m.id].traits, women[w.id].preferences) > threshold:
             #match for women
             match_woman = f_match_dict[w.id]
             match_woman.add(m.id)
             f_match_dict[w.id] = match_woman
 
-        if compatibility_score(women[w.id].traits, men[m.id].preferences) > threshold:
+        if accuracy(women[w.id].traits, men[m.id].preferences) > threshold:
             #match for men
             match_men = m_match_dict[m.id]
             match_men.add(w.id)
@@ -505,6 +541,11 @@ def test_convergence(preferences,num_swipes = 1000, modified_lr = False):
         #no randomness
         swipe_right = 0.5 > swipe_prob
 
+    
+        # print("swiping 2")
+        # print(true_compatibility)
+        # print(swipe_prob)
+
 
 
 
@@ -521,12 +562,12 @@ def test_convergence(preferences,num_swipes = 1000, modified_lr = False):
             model.learning_rate = ((num_swipes - i) / num_swipes) * model.learning_rate
 
 
-
-    print(model.preferences)
-    print(preferences)
+    return model.preferences
+    # print(model.preferences)
+    # print(preferences)
     
-    print("End Compatability: " + str(1 - compatibility_score(model.preferences, preferences)))
-    print("End Results: " + str(analyze_match(model.preferences, preferences)))
+    # print("End Compatability: " + str(1 - compatibility_score(model.preferences, preferences)))
+    # print("End Results: " + str(analyze_match(model.preferences, preferences)))
 
 
 def test_preference_learning():
@@ -585,11 +626,16 @@ if __name__ == "__main__":
     print("\n----------------------------------------------------------")
     print("--------------------- Beginning Test ---------------------")
     print("---------------------------------------------------------- \n")
-    #test_convergence(values_list,50,modified_lr = True)
+    test_convergence(values_list,50,modified_lr = True)
     matches = round_structure(comp_t = 0.5)
+    print("Matches")
     print(matches)
+    print("Percent Matched: " + str(len(matches) / 20))
+    for couple in matches:
+        if(couple[0] != couple[1]):
+            print("diff")
 
-    m_match_dict, f_match_dict = calculate_real_matches(men,women,0.5)
+    m_match_dict, f_match_dict = calculate_real_matches(men,women,0.7)
     print("men matches: " + str(m_match_dict))
     print("female matches: " + str(f_match_dict))
 

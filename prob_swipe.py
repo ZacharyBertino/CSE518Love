@@ -2,7 +2,7 @@ import numpy as np
 from lovers import men, women
 
 #modified to currently do euclidean distance instead of element wise
-def compatibility_score(traits, preferences, exponent=.5):
+def end_compatibility_score(traits, preferences, exponent=0.3):
     """
     Compute compatibility score
 
@@ -15,10 +15,6 @@ def compatibility_score(traits, preferences, exponent=.5):
     - Score between 0 and 1, where 1 is perfect match
     """
     # Calculate normalized differences
-    differencesInner = 0
-
-    for i in range(len(traits)):
-        differencesInner += (traits[i] - preferences[i])**2
 
     differences = np.abs(np.array(traits) - np.array(preferences))
 
@@ -26,9 +22,25 @@ def compatibility_score(traits, preferences, exponent=.5):
     weighted_differences = differences ** exponent
 
     # Calculate final score
-    return differencesInner**0.5
-    #return 1 - np.mean(weighted_differences)
+    return 1 - np.mean(weighted_differences)
 
+
+def compatibility_score(traits, preferences, exponent=.5):
+    differencesInner = 0
+
+    for i in range(len(traits)):
+        differencesInner += (traits[i] - preferences[i])**2
+    return differencesInner**0.5
+
+def soft_accuracy(distance, scale=1.0):
+    return np.exp(-distance * scale)
+
+def accuracy(traits, preferences, exponent=.5):
+    differencesInner = 0
+
+    for i in range(len(traits)):
+        differencesInner += (traits[i] - preferences[i])**2
+    return soft_accuracy(differencesInner**0.5)
 
 def trait_compatibility_distribution(traits, preferences):
     """
