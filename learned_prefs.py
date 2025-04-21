@@ -252,25 +252,25 @@ def simulate_learning(user, potential_matches, current_swipes, total_swipes, n_s
 
     #stimulate
 
-    if(user.id == 0):
-        print(user.id)
-        print("real: " + str(user.preferences))
-        print("men" + str(men_val))
+    # if(user.id == 0):
+        # print(user.id)
+        # print("real: " + str(user.preferences))
+        # print("men" + str(men_val))
     # Simulate swipes
     #trying to add in dynamic learning rate to get close to best fits before slowing down
 
     for i in range(min(n_swipes, len(matches))):
-        if(user.id == 0):
-            print("accuracy: " + str(compatibility_score(user.preferences, model.preferences)))
-            print(model.preferences)
+        # if(user.id == 0):
+        #     print("accuracy: " + str(compatibility_score(user.preferences, model.preferences)))
+        #     print(model.preferences)
         if swipe_heuristic is None:
             profile = matches[i]
         else:
             profile_index = model.find_next_swipe(potential_matches=potential_matches, swipe_heuristic=swipe_heuristic)
             profile = matches[profile_index]
         
-        if(user.id == 0):
-            print(profile)
+        # if(user.id == 0):
+        #     print(profile)
 
         # model.learning_rate = 0.1
         ## print(model.learning_rate)
@@ -319,7 +319,8 @@ def simulate_learning(user, potential_matches, current_swipes, total_swipes, n_s
 #return pairs of ids (male,female) for those who have been matched and therefore removed from the pool of potential matches
 def threshold_matches(male_models, female_models, t, conf_t, male_active, female_active):
 
-    print(male_models[0].preferences)
+    # jls_extract_var = print(male_models[0].preferences)
+    # jls_extract_var
 
     found_matches = []
     potential_matches = []
@@ -368,7 +369,7 @@ def round_structure(swipes_per_round = 10, num_rounds = 2, comp_t = 0.7, confide
     #initialize the models with the user and empty preferences
     for index,m in enumerate(men):
         male_dict[m.id] = create_user_model(m, index, initial_preferences=None)
-        male_dict[m.id].preferences = test_convergence(men[m.id].preferences, 50, True)
+        male_dict[m.id].preferences = test_convergence(men[m.id].preferences, 100, True)
         # if index == 1:
         #      print(male_dict[m.id].preferences)
         #      print(men[m.id].preferences)
@@ -376,7 +377,7 @@ def round_structure(swipes_per_round = 10, num_rounds = 2, comp_t = 0.7, confide
 
     for index,w in enumerate(women):
         female_dict[w.id] = create_user_model(w, index, initial_preferences=None)
-        female_dict[w.id].preferences = test_convergence(women[w.id].preferences, 50, True)
+        female_dict[w.id].preferences = test_convergence(women[w.id].preferences, 100, True)
 
     male_active = list(range(len(men)))
     female_active = list(range(len(women)))
@@ -409,7 +410,7 @@ def round_structure(swipes_per_round = 10, num_rounds = 2, comp_t = 0.7, confide
     score_dict = {}
     #first go through all matches and compare their compatibility with true compatibility
     for m in matches:
-        print("m: " + str(m[0]) + " f: " + str(m[1]))
+        # print("m: " + str(m[0]) + " f: " + str(m[1]))
         model_score = min(compatibility_score(men[m[0]].traits,female_dict[m[1]].get_expected_preferences()),compatibility_score(women[m[1]].traits, male_dict[m[0]].get_expected_preferences()))
         real_score = min(compatibility_score(men[m[0]].traits,women[m[1]].preferences),compatibility_score(women[m[1]].traits, men[m[0]].preferences))
         score_dict[m] = model_score - real_score
@@ -422,8 +423,8 @@ def round_structure(swipes_per_round = 10, num_rounds = 2, comp_t = 0.7, confide
     w_mse = np.mean(np.square(([women[m.id].preferences for m in women],
                                [female_dict[m.id].get_expected_preferences() for m in women])))
 
-    print("female mse: " + str(w_mse))
-    print("male mse: " + str(m_mse))
+    # print("female mse: " + str(w_mse))
+    # print("male mse: " + str(m_mse))
 
 
     return matches
@@ -468,8 +469,8 @@ def compare_matches(female_real, male_real, derived_matches):
         elif m[1] in male_real[m[0]] or m[0] in female_real[m[1]]:
             partial_correct += 1
 
-    print("correct percentage: " + str(float(correct) / float(len(derived_matches))))
-    print("partial percentage: " + str(float(partial_correct) / float(len(derived_matches))))
+    # print("correct percentage: " + str(float(correct) / float(len(derived_matches))))
+    # print("partial percentage: " + str(float(partial_correct) / float(len(derived_matches))))
 
     return float(correct) / float(len(derived_matches))
 
@@ -626,20 +627,33 @@ if __name__ == "__main__":
     print("\n----------------------------------------------------------")
     print("--------------------- Beginning Test ---------------------")
     print("---------------------------------------------------------- \n")
-    test_convergence(values_list,50,modified_lr = True)
-    matches = round_structure(comp_t = 0.5)
+    #test_convergence(values_list,50,modified_lr = True)
+    matches = round_structure(comp_t = 0.625, confidence_t = .2)
     print("Matches")
     print(matches)
     print("Percent Matched: " + str(len(matches) / 20))
-    for couple in matches:
-        if(couple[0] != couple[1]):
-            print("diff")
-
-    m_match_dict, f_match_dict = calculate_real_matches(men,women,0.7)
+    # for couple in matches:
+    #     if(couple[0] != couple[1]):
+    #         print(men[couple[0]])
+    #         print(women[couple[1]])
+    #         print(accuracy(men[couple[0]].traits, women[couple[1]].preferences))
+    #         print(accuracy(men[couple[1]].traits, women[couple[0]].preferences))
+    m_match_dict, f_match_dict = calculate_real_matches(men,women,0.625)
     print("men matches: " + str(m_match_dict))
     print("female matches: " + str(f_match_dict))
 
     print("match accuracy: " + str(compare_matches(m_match_dict, f_match_dict, matches)))
 
-    # print("matches: " + str(matches))
+    print("multiple runs...")
+
+    num_runs = 100
+    runs_correct = 0
+    runs_matched = 0
+    for i in range(num_runs): 
+        matches = round_structure(comp_t = 0.5, confidence_t = .9)
+        runs_matched += len(matches) / 20
+        runs_correct += compare_matches(m_match_dict, f_match_dict, matches)
+    
+    print("Avg Correct: " + str(runs_correct / num_runs))
+    print("Avg Matched: " + str(runs_matched / num_runs))
 
